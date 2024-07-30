@@ -77,6 +77,7 @@ PUTCHAR_PROTOTYPE
 	HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, 0xFFFF);
 	return ch;
 }
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -92,32 +93,32 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 
 void get_data_by_polling(VL53L8CX_Configuration *p_dev){
-  // status = vl53l8cx_check_data_ready(&dev_, &p_data_ready);
-  // if(p_data_ready){
-  //   status = vl53l8cx_get_resolution(p_dev, &resolution);
-  //   status = vl53l8cx_get_ranging_data(p_dev, &results_);
+  status = vl53l8cx_check_data_ready(&dev_, &p_data_ready);
+  if(p_data_ready){
+    status = vl53l8cx_get_resolution(p_dev, &resolution_);
+    status = vl53l8cx_get_ranging_data(p_dev, &results_);
 
-  //   for(int i = 0; i < resolution;i++){
-  //   	/* Print per zone results */
-  //   	// printf("Zone : %2d, Nb targets : %2u, Ambient : %4lu Kcps/spads, ",
-  //   			// i,
-  //   			// results_.nb_target_detected[i],
-  //   			// results_.ambient_per_spad[i]);
+    for(int i = 0; i < resolution_; ++i){
+    	/* Print per zone results */
+    	printf("Zone : %2d, Nb targets : %2u, Ambient : %4lu Kcps/spads, ",
+    			i,
+    			results_.nb_target_detected[i],
+    			results_.ambient_per_spad[i]);
 
-  //   	/* Print per target results */
-  //   	if(results_.nb_target_detected[i] > 0){
-  //   		// printf("Target status : %3u, Distance : %4d mm\n",
-  //   				// results_.target_status[VL53L8CX_NB_TARGET_PER_ZONE * i],
-  //   				// results_.distance_mm[VL53L8CX_NB_TARGET_PER_ZONE * i]);
-  //   	}else{
-  //   		// printf("Target status : 255, Distance : No target\n");
-  //   	}
-  //   }
-  //   printf("\n");
-  // }
-  // else{
-  //   HAL_Delay(5);
-  // }
+    	/* Print per target results */
+    	if(results_.nb_target_detected[i] > 0){
+    		// printf("Target status : %3u, Distance : %4d mm\n",
+    				// results_.target_status[VL53L8CX_NB_TARGET_PER_ZONE * i],
+    				// results_.distance_mm[VL53L8CX_NB_TARGET_PER_ZONE * i]);
+    	}else{
+    		// printf("Target status : 255, Distance : No target\n");
+    	}
+    }
+    printf("\n");
+  }
+  else{
+    HAL_Delay(5);
+  }
 }
 
 void get_data_by_interrupt(VL53L8CX_Configuration *p_dev) {
@@ -183,44 +184,50 @@ int main(void) {
   // Reset vl53l8cx
   VL53L8CX_Reset_Sensor(&(dev_.platform));
 
-  uint8_t send_msg[48] = {'\0'};
+  uint8_t setup_msg[48] = {'\0'};
+  uint8_t data_msg[128] = {'\0'};
+
+  sprintf(setup_msg, "Program begin.\r\n");
+  HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
+
   while (1) {
     status = vl53l8cx_is_alive(&dev_, &is_alive);
     if (!is_alive) {
-      sprintf(send_msg, "is_alive: %d\r\n", is_alive);
-      HAL_UART_Transmit(&huart2, send_msg, sizeof(send_msg), 100);
       HAL_Delay(1000);
-    // return 255;
     }
     else {
-      sprintf(send_msg, "is_alive: %d\r\n", is_alive);
-      HAL_UART_Transmit(&huart2, send_msg, sizeof(send_msg), 100);
       break;
     }
   }
+
+  memset(setup_msg, 0, sizeof(setup_msg));
+  sprintf(setup_msg, "is_alive: %d\r\n", is_alive);
+  HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
 
   // Check if sensor attached
   
   // Start ranging sensor
   status = vl53l8cx_init(&dev_);
+
+
   status = vl53l8cx_set_ranging_frequency_hz(&dev_, 5);
   status = vl53l8cx_set_ranging_mode(&dev_, VL53L8CX_RANGING_MODE_AUTONOMOUS);
   status = vl53l8cx_start_ranging(&dev_);
   // test sending data.
-  // uint8_t send_msg[48] = {'\0'};
+  // uint8_t setup_msg[48] = {'\0'};
   uint8_t X = 0;
-
+  uint32_t tickstart = HAL_GetTick();
+  uint32_t led_delay = 1000;
   while (1) {
-    // get_data_by_polling(&dev_);
+    get_data_by_polling(&dev_);
 
     // LED Control
-    uint32_t tickstart = HAL_GetTick();
-    uint32_t led_delay = 1000;
     if (HAL_GetTick() - tickstart > led_delay) {
       HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
       tickstart = HAL_GetTick();
-      sprintf(send_msg, "Hello world! x=%d\n\r", X);
-      HAL_UART_Transmit(&huart2, send_msg, sizeof(send_msg), 100);
+      memset(setup_msg, 0, sizeof(setup_msg));
+      sprintf(setup_msg, "Hello world! x=%d\n\r", X);
+      HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
       ++X;
     }
   }
@@ -301,7 +308,7 @@ static void MX_SPI2_Init(void)
   /* Change SPI baudrate using prescaler:
 	 * Default clock is 84MHz
 	 */
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
