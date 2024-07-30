@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"main.h": "c",
+			"platform.h": "c",
+			"vl53l8cx_buffers.h": "c"
+		}
+	}
+}
