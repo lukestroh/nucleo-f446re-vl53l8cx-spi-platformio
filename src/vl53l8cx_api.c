@@ -878,7 +878,7 @@ uint8_t vl53l8cx_get_ranging_data(
 			}
 		}
 	}
-#endif
+#endif  // VL53L8CX_USE_RAW_FORMAT
 
 #ifndef VL53L8CX_DISABLE_MOTION_INDICATOR
 	for(i = 0; i < (uint32_t)32; i++)

@@ -153,19 +153,33 @@ void VL53L8CX_SwapBuffer(
 		uint8_t 		*buffer,
 		uint16_t 	 	 size)
 {
-	uint32_t i, tmp;
+	// uint32_t i, tmp;
 
-	/* Example of possible implementation using <string.h> */
-	for(i = 0; i < size; i = i + 4)
-	{
-		tmp = (
-		  buffer[i]<<24)
-		|(buffer[i+1]<<16)
-		|(buffer[i+2]<<8)
-		|(buffer[i+3]);
+	// /* Example of possible implementation using <string.h> */
+	// for(i = 0; i < size; i = i + 4)
+	// {
+	// 	tmp = (
+	// 	  buffer[i]<<24)
+	// 	|(buffer[i+1]<<16)
+	// 	|(buffer[i+2]<<8)
+	// 	|(buffer[i+3]);
 
-		memcpy(&(buffer[i]), &tmp, 4);
-	}
+	// 	memcpy(&(buffer[i]), &tmp, 4);
+	// }
+
+	// The following code grabbed from: https://community.st.com/t5/imaging-sensors/unable-to-start-ranging-on-the-vl53l8cx/td-p/604341
+	uint32_t i;
+    uint8_t tmp[4] = {0};
+
+    for (i = 0; i < size; i = i + 4) {
+
+        tmp[0] = buffer[i + 3];
+        tmp[1] = buffer[i + 2];
+        tmp[2] = buffer[i + 1];
+        tmp[3] = buffer[i];
+
+        memcpy(&(buffer[i]), tmp, 4);
+    }
 }
 
 uint8_t VL53L8CX_WaitMs(

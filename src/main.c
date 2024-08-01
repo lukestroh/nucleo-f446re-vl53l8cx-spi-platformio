@@ -91,7 +91,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	}
 }
 
-
 void get_data_by_polling(VL53L8CX_Configuration *p_dev){
   status = vl53l8cx_check_data_ready(&dev_, &p_data_ready);
   if(p_data_ready){
@@ -100,17 +99,17 @@ void get_data_by_polling(VL53L8CX_Configuration *p_dev){
 
     for(int i = 0; i < resolution_; ++i){
     	/* Print per zone results */
-    	printf("Zone : %2d, Nb targets : %2u, Ambient : %4lu Kcps/spads, ",
-    			i,
-    			results_.nb_target_detected[i],
-    			results_.ambient_per_spad[i]);
+    	// printf("Zone : %2d, Nb targets : %2u, Ambient : %4lu Kcps/spads, ",
+    	// 		i,
+    	// 		results_.nb_target_detected[i],
+    	// 		results_.ambient_per_spad[i]);
 
     	/* Print per target results */
     	if(results_.nb_target_detected[i] > 0){
     		// printf("Target status : %3u, Distance : %4d mm\n",
     				// results_.target_status[VL53L8CX_NB_TARGET_PER_ZONE * i],
     				// results_.distance_mm[VL53L8CX_NB_TARGET_PER_ZONE * i]);
-    	}else{
+    	} else {
     		// printf("Target status : 255, Distance : No target\n");
     	}
     }
@@ -133,7 +132,7 @@ void get_data_by_interrupt(VL53L8CX_Configuration *p_dev) {
       printf("Zone: %2d, Nb targets: %2u, Ambient: %4lu Kcps/spads, ",
               i,
               results_.nb_target_detected[i],
-              results_.ambient_per_spad[i]);
+              0); // results_.ambient_per_spad[i]);
     
       // print per-target results
       if (results_.nb_target_detected[i] > 0) {
@@ -148,6 +147,25 @@ void get_data_by_interrupt(VL53L8CX_Configuration *p_dev) {
     printf("\n");
   }
 }
+
+void wait_for_vl53l8cx(VL53L8CX_Configuration* p_dev, uint8_t* p_is_alive, uint8_t* send_msg_buf) {
+    // Check if sensor attached TODO: move to function.
+  while (1) {
+    status = vl53l8cx_is_alive(p_dev, p_is_alive);
+    if (!(*p_is_alive)) {
+      memset(send_msg_buf, 0, sizeof(send_msg_buf));
+      sprintf(send_msg_buf, "is_alive: %d\r\n", *p_is_alive);
+      HAL_UART_Transmit(&huart2, send_msg_buf, sizeof(send_msg_buf), 100);
+      HAL_Delay(1000);
+    }
+    else {
+      memset(send_msg_buf, 0, sizeof(send_msg_buf));
+      sprintf(send_msg_buf, "is_alive: %d\r\n", *p_is_alive);
+      HAL_UART_Transmit(&huart2, send_msg_buf, sizeof(send_msg_buf), 100);
+      break;
+    } 
+  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -155,41 +173,28 @@ void get_data_by_interrupt(VL53L8CX_Configuration *p_dev) {
   * @retval int
   */
 int main(void) {
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_SPI2_Init();
   MX_USART2_UART_Init();
-  /* USER CODE BEGIN 2 */
 
   // Reset vl53l8cx
   VL53L8CX_Reset_Sensor(&(dev_.platform));
 
+  // UART string buffers
   uint8_t setup_msg[48] = {'\0'};
   uint8_t data_msg[128] = {'\0'};
 
   sprintf(setup_msg, "Program begin.\r\n");
   HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
 
+  // Check if sensor attached TODO: move to function.
+  // wait_for_vl53l8cx(&dev_, &is_alive, setup_msg);
   while (1) {
     status = vl53l8cx_is_alive(&dev_, &is_alive);
     if (!is_alive) {
@@ -197,27 +202,64 @@ int main(void) {
     }
     else {
       break;
-    }
+    } 
   }
-
   memset(setup_msg, 0, sizeof(setup_msg));
   sprintf(setup_msg, "is_alive: %d\r\n", is_alive);
   HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
 
-  // Check if sensor attached
-  
-  // Start ranging sensor
+  // Initialize the sensor. The function copies the firmware (~84 Kbytes) to the module. This is done by loading the code over the I²C/SPI interface, and performing a boot routine to complete the initialization
   status = vl53l8cx_init(&dev_);
+  if (status != VL53L8CX_STATUS_OK) {
+    memset(setup_msg, 0, sizeof(setup_msg));
+    sprintf(setup_msg, "init failed with status %d\r\n", status);
+    HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
+    return 255;
+  }
 
+  status = vl53l8cx_set_ranging_mode(&dev_, VL53L8CX_RANGING_MODE_CONTINUOUS);
+   if (status != VL53L8CX_STATUS_OK) {
+    memset(setup_msg, 0, sizeof(setup_msg));
+    sprintf(setup_msg, "set_ranging_mode failed with status %d\r\n", status);
+    HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
+    return 255;
+  }
+  status = vl53l8cx_set_resolution(&dev_, VL53L8CX_RESOLUTION_4X4); // Set the zone resolution of the sensor.
+   if (status != VL53L8CX_STATUS_OK) {
+    memset(setup_msg, 0, sizeof(setup_msg));
+    sprintf(setup_msg, "set_resolution failed with status %d\r\n", status);
+    HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
+    return 255;
+  }
+  status = vl53l8cx_set_ranging_frequency_hz(&dev_, 1);
+   if (status != VL53L8CX_STATUS_OK) {
+    memset(setup_msg, 0, sizeof(setup_msg));
+    sprintf(setup_msg, "set_ranging_frequency failed with status %d\r\n", status);
+    HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
+    return 255;
+  }
+  
+  status = vl53l8cx_set_power_mode(&dev_, VL53L8CX_POWER_MODE_WAKEUP);
+  if (status != VL53L8CX_STATUS_OK) {
+    memset(setup_msg, 0, sizeof(setup_msg));
+    sprintf(setup_msg, "set_power_mode failed with status %d", status);
+    HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
+    return 255;
+  }
 
-  status = vl53l8cx_set_ranging_frequency_hz(&dev_, 5);
-  status = vl53l8cx_set_ranging_mode(&dev_, VL53L8CX_RANGING_MODE_AUTONOMOUS);
+  // Start ranging
   status = vl53l8cx_start_ranging(&dev_);
-  // test sending data.
-  // uint8_t setup_msg[48] = {'\0'};
-  uint8_t X = 0;
+  if (status != VL53L8CX_STATUS_OK) {
+    memset(setup_msg, 0, sizeof(setup_msg));
+    sprintf(setup_msg, "start_ranging failed with status %d, data_size: %d\r\n", status, (int)dev_.data_read_size);
+    HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
+    return 255;
+  }
+
+  // Main loop parameters
   uint32_t tickstart = HAL_GetTick();
   uint32_t led_delay = 1000;
+  // Main loop
   while (1) {
     get_data_by_polling(&dev_);
 
@@ -225,13 +267,19 @@ int main(void) {
     if (HAL_GetTick() - tickstart > led_delay) {
       HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
       tickstart = HAL_GetTick();
-      memset(setup_msg, 0, sizeof(setup_msg));
-      sprintf(setup_msg, "Hello world! x=%d\n\r", X);
-      HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
-      ++X;
+
+      for (uint8_t i=0; i<16; ++i) {
+        memset(data_msg, 0, sizeof(data_msg));
+        sprintf(data_msg, "Zone : %2d, Nb targets : %2u, Ambient : %4lu Kcps/spads,\r\n",
+                          i,
+                          results_.nb_target_detected[i],
+                          0);// results_.ambient_per_spad[i]);
+        HAL_UART_Transmit(&huart2, data_msg, sizeof(data_msg), 100);
+      }
     }
+    HAL_Delay(100);
   }
-  /* USER CODE END 3 */
+
 }
 
 /**
