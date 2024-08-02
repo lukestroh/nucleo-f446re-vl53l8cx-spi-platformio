@@ -35,6 +35,7 @@ typedef struct
 
     /* Communication buffer used for SPI. Min size is 32800. Only given as example */
     uint8_t spi_comm_buffer[32800];
+	// uint8_t spi_comm_buffer[65600]
 
 } VL53L8CX_Platform;
 

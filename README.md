@@ -1,5 +1,8 @@
 # F446RE-VL53L8CX
 
+#### Serial monitoring
+`minicom -D /dev/ttyACM0 -b 115200`
+
 ## TODO:
 
 1. Redo with interrupts

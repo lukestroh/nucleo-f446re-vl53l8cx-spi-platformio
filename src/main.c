@@ -187,7 +187,7 @@ int main(void) {
   VL53L8CX_Reset_Sensor(&(dev_.platform));
 
   // UART string buffers
-  uint8_t setup_msg[48] = {'\0'};
+  uint8_t setup_msg[128] = {'\0'};
   uint8_t data_msg[128] = {'\0'};
 
   sprintf(setup_msg, "Program begin.\r\n");
@@ -251,7 +251,7 @@ int main(void) {
   status = vl53l8cx_start_ranging(&dev_);
   if (status != VL53L8CX_STATUS_OK) {
     memset(setup_msg, 0, sizeof(setup_msg));
-    sprintf(setup_msg, "start_ranging failed with status %d, data_size: %d\r\n", status, (int)dev_.data_read_size);
+    sprintf(setup_msg, "(outer)start_ranging failed with status %d, data_size: %d\r\n", status, ((int)dev_.data_read_size));
     HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
     return 255;
   }
