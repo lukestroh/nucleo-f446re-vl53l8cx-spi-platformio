@@ -69,7 +69,7 @@ void Error_Handler(void);
 #define INT_C_Pin GPIO_PIN_4
 #define INT_C_GPIO_Port GPIOC
 #define INT_C_EXTI_IRQn EXTI4_IRQn
-#define PWR_EN_C_Pin GPIO_PIN_0
+#define PWR_EN_C_Pin GPIO_PIN_7
 #define PWR_EN_C_GPIO_Port GPIOB
 #define NCS_C_Pin GPIO_PIN_12
 #define NCS_C_GPIO_Port GPIOB
