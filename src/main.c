@@ -18,6 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "gpio.h"
+#include "print.h"
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -93,28 +95,28 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 }
 
 void get_data_by_polling(VL53L8CX_Configuration *p_dev){
-  status = vl53l8cx_check_data_ready(&dev_, &p_data_ready);
+  status = vl53l8cx_check_data_ready(&dev_, &p_data_ready); // TODO: fix pointers
   if(p_data_ready){
     status = vl53l8cx_get_resolution(p_dev, &resolution_);
     status = vl53l8cx_get_ranging_data(p_dev, &results_);
 
-    for(int i = 0; i < resolution_; ++i){
-    	/* Print per zone results */
-    	// printf("Zone : %2d, Nb targets : %2u, Ambient : %4lu Kcps/spads, ",
-    	// 		i,
-    	// 		results_.nb_target_detected[i],
-    	// 		results_.ambient_per_spad[i]);
+    // for(int i = 0; i < resolution_; ++i){
+    // 	/* Print per zone results */
+    // 	// printf("Zone : %2d, Nb targets : %2u, Ambient : %4lu Kcps/spads, ",
+    // 	// 		i,
+    // 	// 		results_.nb_target_detected[i],
+    // 	// 		results_.ambient_per_spad[i]);
 
-    	/* Print per target results */
-    	if(results_.nb_target_detected[i] > 0){
-    		// printf("Target status : %3u, Distance : %4d mm\n",
-    				// results_.target_status[VL53L8CX_NB_TARGET_PER_ZONE * i],
-    				// results_.distance_mm[VL53L8CX_NB_TARGET_PER_ZONE * i]);
-    	} else {
-    		// printf("Target status : 255, Distance : No target\n");
-    	}
-    }
-    printf("\n");
+    // 	/* Print per target results */
+    // 	if(results_.nb_target_detected[i] > 0){
+    // 		// printf("Target status : %3u, Distance : %4d mm\n",
+    // 				// results_.target_status[VL53L8CX_NB_TARGET_PER_ZONE * i],
+    // 				// results_.distance_mm[VL53L8CX_NB_TARGET_PER_ZONE * i]);
+    // 	} else {
+    // 		// printf("Target status : 255, Distance : No target\n");
+    // 	}
+    // }
+  //   printf("\n");
   }
   else{
     HAL_Delay(5);
@@ -123,7 +125,7 @@ void get_data_by_polling(VL53L8CX_Configuration *p_dev){
 
 void get_data_by_interrupt(VL53L8CX_Configuration *p_dev) {
   __WFI(); // wait for interrupt
-  if (int_count != 0) {
+  if (int_count != 0) { // TODO: Fix interrupts
     int_count = 0;
     status = vl53l8cx_get_resolution(p_dev, &resolution_);
     status = vl53l8cx_get_ranging_data(p_dev, &results_);
@@ -154,22 +156,13 @@ void get_data_by_interrupt(VL53L8CX_Configuration *p_dev) {
 void wait_for_vl53l8cx(VL53L8CX_Configuration* p_dev, uint8_t* p_is_alive, uint8_t* send_msg_buf) {
     // Check if sensor attached TODO: move to function.
 }
-
-void print_serial(UART_HandleTypeDef* huart2, char* _msg_buf, size_t _msg_buf_size, const char* data, ...) {
-  va_list args;
-  va_start(args, data);
-  memset(_msg_buf, 0, _msg_buf_size);
-  vsnprintf((char*)_msg_buf, _msg_buf_size, data, args);
-  HAL_UART_Transmit(huart2, (uint8_t*)_msg_buf, _msg_buf_size, 100);
-  va_end(args);
-}
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
-int main(void) {
+ int main(void) {
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
@@ -185,7 +178,7 @@ int main(void) {
 
   // UART string buffers
   char setup_msg[128] = {'\0'};
-  char data_msg[128] = {'\0'};
+  char data_msg[256] = {'\0'};
 
   // sprintf(setup_msg, "Program begin.\r\n");
   // HAL_UART_Transmit(&huart2, setup_msg, sizeof(setup_msg), 100);
@@ -202,7 +195,6 @@ int main(void) {
       break;
     } 
   }
-
   print_serial(&huart2, setup_msg, sizeof(setup_msg), "is_alive: %d\r\n", is_alive);
 
   // Initialize the sensor. The function copies the firmware (~84 Kbytes) to the module. This is done by loading the code over the I²C/SPI interface, and performing a boot routine to complete the initialization
@@ -222,7 +214,7 @@ int main(void) {
     print_serial(&huart2, setup_msg, sizeof(setup_msg), "set_resolution failed with status %d\r\n", status);
     return 255;
   }
-  status = vl53l8cx_set_ranging_frequency_hz(&dev_, 1);
+  status = vl53l8cx_set_ranging_frequency_hz(&dev_, 20);
    if (status != VL53L8CX_STATUS_OK) {
     print_serial(&huart2, setup_msg, sizeof(setup_msg), "set_ranging_frequency failed with status %d\r\n", status);
     return 255;
@@ -248,21 +240,20 @@ int main(void) {
   while (1) {
     get_data_by_polling(&dev_);
 
+    for (uint8_t i=0; i<resolution_; ++i) {
+        print_serial(&huart2, data_msg, sizeof(data_msg),
+                     "Zone: %2d, Nb targets: %2u, Distance: %2u\r\n",
+                     i, 
+                     results_.nb_target_detected[i],
+                     results_.distance_mm[i]);
+    }
+
     // LED Control
     if (HAL_GetTick() - tickstart > led_delay) {
       HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-      tickstart = HAL_GetTick();
-
-      for (uint8_t i=0; i<16; ++i) {
-        print_serial(&huart2, data_msg, sizeof(data_msg),
-                     "Zone : %2d, Nb targets : %2u,",
-                     i, 
-                     results_.nb_target_detected[i]);
-      }
+      tickstart = HAL_GetTick();      
     }
-    HAL_Delay(100);
   }
-
 }
 
 /**
@@ -339,7 +330,7 @@ static void MX_SPI2_Init(void)
   /* Change SPI baudrate using prescaler:
 	 * Default clock is 84MHz
 	 */
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -354,11 +345,6 @@ static void MX_SPI2_Init(void)
 
 }
 
-/**
-  * @brief USART2 Initialization Function
-  * @param None
-  * @retval None
-  */
 static void MX_USART2_UART_Init(void)
 {
 
@@ -387,74 +373,7 @@ static void MX_USART2_UART_Init(void)
 
 }
 
-/**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_GPIO_Init(void)
-{
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
 
-  /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, PWR_EN_C_Pin|LPn_C_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(NCS_C_GPIO_Port, NCS_C_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : B1_Pin */
-  GPIO_InitStruct.Pin = B1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : INT_C_Pin */
-  GPIO_InitStruct.Pin = INT_C_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(INT_C_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PWR_EN_C_Pin LPn_C_Pin */
-  GPIO_InitStruct.Pin = PWR_EN_C_Pin|LPn_C_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : NCS_C_Pin */
-  GPIO_InitStruct.Pin = NCS_C_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(NCS_C_GPIO_Port, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
-
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0); // This one is from the demo, not needed??
-  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
-
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
-
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
-}
 
 /* USER CODE BEGIN 4 */
 

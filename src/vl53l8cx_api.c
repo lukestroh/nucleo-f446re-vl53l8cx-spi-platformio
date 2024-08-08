@@ -15,6 +15,8 @@
 #include "vl53l8cx_api.h"
 #include "vl53l8cx_buffers.h"
 
+
+#include "print.h"
 #ifndef __vl53l8cx_debug__
 #define __vl53l8cx_debug__ 1
 #endif
@@ -521,6 +523,10 @@ uint8_t vl53l8cx_set_power_mode(
 uint8_t vl53l8cx_start_ranging(
 		VL53L8CX_Configuration		*p_dev)
 {
+	/*            DEBUG INFO             */
+	extern UART_HandleTypeDef huart2;
+	char debug_msg[128] = {'\0'};
+
 	uint8_t resolution, status = VL53L8CX_STATUS_OK;
 	uint16_t tmp;
 	uint32_t i;
@@ -617,18 +623,11 @@ uint8_t vl53l8cx_start_ranging(
 	}
 	p_dev->data_read_size += (uint32_t)24;
 
-	/*            DEBUG INFO             */
-	#if __vl53l8cx_debug__
-	extern UART_HandleTypeDef huart2;
-	uint8_t debug_msg[128];
-
 	status |= vl53l8cx_dci_write_data(p_dev,
 			(uint8_t*)&(output), VL53L8CX_DCI_OUTPUT_LIST,
 			(uint16_t)sizeof(output));
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "dci_write_data0 failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "dci_write_data0 failed with status %d\r\n", status);
 	}
 
 	header_config[0] = p_dev->data_read_size;
@@ -638,72 +637,51 @@ uint8_t vl53l8cx_start_ranging(
 			(uint8_t*)&(header_config), VL53L8CX_DCI_OUTPUT_CONFIG,
 			(uint16_t)sizeof(header_config));
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "dci_write_data1 failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "dci_write_data1 failed with status %d\r\n", status);
 	}
 
 	status |= vl53l8cx_dci_write_data(p_dev,
 			(uint8_t*)&(output_bh_enable), VL53L8CX_DCI_OUTPUT_ENABLES,
 			(uint16_t)sizeof(output_bh_enable));
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "dci_write_data2 failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "dci_write_data2 failed with status %d\r\n", status);
 	}
 
 	/* Start xshut bypass (interrupt mode) */
 	status |= VL53L8CX_WrByte(&(p_dev->platform), 0x7fff, 0x00);
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "WrByte0 failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "WrByte0 failed with status %d\r\n", status);
 	}
 	status |= VL53L8CX_WrByte(&(p_dev->platform), 0x09, 0x05);
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "wrbyte1 failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "wrbyte1 failed with status %d\r\n", status);
 	}
 	status |= VL53L8CX_WrByte(&(p_dev->platform), 0x7fff, 0x02);
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "wrbyte2 failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "wrbyte2 failed with status %d\r\n", status);
 	}
 
 	/* Start ranging session */
 	status |= VL53L8CX_WrMulti(&(p_dev->platform), VL53L8CX_UI_CMD_END -
 			(uint16_t)(4 - 1), (uint8_t*)cmd, sizeof(cmd));
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "wrmulti0 failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "wrmulti0 failed with status %d\r\n", status);
 	}
 	status |= _vl53l8cx_poll_for_answer(p_dev, 4, 1,
 			VL53L8CX_UI_CMD_STATUS, 0xff, 0x03);
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "poll_for_answer failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "poll_for_answer failed with status %d\r\n", status);
 	}
 
 	/* Read ui range data content and compare if data size is the correct one */
 	status |= vl53l8cx_dci_read_data(p_dev,
 			(uint8_t*)p_dev->temp_buffer, 0x5440, 12);
 	if (status != VL53L8CX_STATUS_OK) {
-		memset(debug_msg, 0, sizeof(debug_msg));
-		sprintf(debug_msg, "dci_read_data0 failed with status %d\r\n", status);
-		HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
+		print_serial(&huart2, debug_msg, sizeof(debug_msg), "dci_read_data0 failed with status %d\r\n", status);
 	}
 
+    print_serial(&huart2, debug_msg, sizeof(debug_msg), "(inner)start_ranging failed with status %d, data_size: %d\r\n", status, ((int)p_dev->data_read_size));	
 	
-
-	memset(debug_msg, 0, sizeof(debug_msg));
-    sprintf(debug_msg, "(inner)start_ranging failed with status %d, data_size: %d\r\n", status, ((int)p_dev->data_read_size));
-    HAL_UART_Transmit(&huart2, debug_msg, sizeof(debug_msg), 100);
-	
-	#endif // debug
 
 	(void)memcpy(&tmp, &(p_dev->temp_buffer[0x8]), sizeof(tmp));
 	if(tmp != p_dev->data_read_size)
